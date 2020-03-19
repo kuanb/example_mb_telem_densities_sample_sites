@@ -127,12 +127,7 @@
 
 
   function loadDay(map, fileLoc) {
-    return fetch(fileLoc, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      }
-    })
+    return fetch(fileLoc)
       .then(response => response.text())
       .then(data => {
         const onlyValids = _u.filter(data.split('\n'), r => !!r);
