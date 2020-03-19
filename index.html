@@ -105,9 +105,9 @@
     generateSourceAndLayer(afterMap);
 
     const beforePromise = loadDay(beforeMap,
-      'https://github.com/kuanb/example_mb_telem_densities_sample_sites/raw/gh-pages/2020-01-14_san_francisco_traffic_volumes.geojson');
+      'http://kuanbutts.com/example_mb_telem_densities_sample_sites/2020-01-14_san_francisco_traffic_volumes.geojson');
     const afterPromise = loadDay(afterMap,
-      'https://github.com/kuanb/example_mb_telem_densities_sample_sites/raw/gh-pages/2020-03-17_san_francisco_traffic_volumes.geojson');
+      'http://kuanbutts.com/example_mb_telem_densities_sample_sites/2020-03-17_san_francisco_traffic_volumes.geojson');
 
     Promise.all([beforePromise, afterPromise]).then(res => {
       const beforeRaw = res[0];
