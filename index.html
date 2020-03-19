@@ -105,9 +105,9 @@
     generateSourceAndLayer(afterMap);
 
     const beforePromise = loadDay(beforeMap,
-      'https://telem-densities-sample-maps.s3.amazonaws.com/2020-01-14_san_francisco_traffic_volumes.geojson');
+      'http://telem-densities-sample-maps.s3.amazonaws.com/2020-01-14_san_francisco_traffic_volumes.geojson');
     const afterPromise = loadDay(afterMap,
-      'https://telem-densities-sample-maps.s3.amazonaws.com/2020-01-17_san_francisco_traffic_volumes.geojson');
+      'http://telem-densities-sample-maps.s3.amazonaws.com/2020-01-17_san_francisco_traffic_volumes.geojson');
 
     Promise.all([beforePromise, afterPromise]).then(res => {
       const beforeRaw = res[0];
@@ -127,7 +127,12 @@
 
 
   function loadDay(map, fileLoc) {
-    return fetch(fileLoc)
+    return fetch(fileLoc, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      }
+    })
       .then(response => response.text())
       .then(data => {
         const onlyValids = _u.filter(data.split('\n'), r => !!r);
