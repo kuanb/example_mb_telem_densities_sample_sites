@@ -1,0 +1,201 @@
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <title>Sample Data Comparison - covid telemetry</title>
+
+  <script src="https://d3js.org/d3.v5.min.js"></script>
+
+  <script src="https://api.mapbox.com/mapbox-gl-js/v1.8.1/mapbox-gl.js"></script>
+  <link href="https://api.mapbox.com/mapbox-gl-js/v1.8.1/mapbox-gl.css" rel="stylesheet" />  
+
+  <script src="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-compare/v0.1.0/mapbox-gl-compare.js"></script>
+  <link
+    rel="stylesheet"
+    href="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-compare/v0.1.0/mapbox-gl-compare.css"
+    type="text/css"
+  />
+
+</head>
+
+<style type="text/css">
+  body {
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+  }
+  body * {
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+  }
+  #map {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 100%;
+  }
+  .map {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 100%;
+  }
+</style>
+
+<body>
+
+<div id="before" class="map"></div>
+<div id="after" class="map"></div>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/lodash.js/4.17.15/lodash.min.js"> </script>
+<script>
+  _u = _.noConflict();
+</script>
+
+<script>
+
+  const centerMap = [-122.431297, 37.773972];
+  const startMapZoom = 11;
+
+  mapboxgl.accessToken = 'pk.eyJ1Ijoia3VhbmIiLCJhIjoidXdWUVZ2USJ9.qNKXXP6z9_fKA8qrmpOi6Q';
+
+  var beforeMap = new mapboxgl.Map({
+    container: 'before',
+    style: 'mapbox://styles/mapbox/dark-v10',
+    center: centerMap,
+    zoom: startMapZoom
+  });
+   
+  var afterMap = new mapboxgl.Map({
+    container: 'after',
+    style: 'mapbox://styles/mapbox/dark-v10',
+    center: centerMap,
+    zoom: startMapZoom
+  });
+   
+  var map = new mapboxgl.Compare(beforeMap, afterMap, {
+    // mousemove: true
+  });
+
+  function generateSourceAndLayer(map) {
+    map.addSource('resultSource', {
+    'type': 'geojson',
+    'data': null,
+    });
+     
+    map.addLayer({
+      'id': 'resultLayer',
+      'type': 'line',
+      'source': 'resultSource',
+      'paint': {
+        'line-color': ['get', 'color'],
+        'line-opacity': 0.8,
+        'line-width': ['*', ['get', 'width'], 10],
+      },
+    });  
+  }
+
+  afterMap.on('load', () => {
+    generateSourceAndLayer(beforeMap);
+    generateSourceAndLayer(afterMap);
+
+    const beforePromise = loadDay(beforeMap,
+      'https://telem-densities-sample-maps.s3.amazonaws.com/2020-01-14_san_francisco_traffic_volumes.geojson');
+    const afterPromise = loadDay(afterMap,
+      'https://telem-densities-sample-maps.s3.amazonaws.com/2020-01-17_san_francisco_traffic_volumes.geojson');
+
+    Promise.all([beforePromise, afterPromise]).then(res => {
+      const beforeRaw = res[0];
+      const afterRaw = res[1];
+
+      const denominator = Math.max(
+        getDenominator(beforeRaw),
+        getDenominator(afterRaw));
+
+      const beforeFC = createFeatureCollection(beforeRaw, denominator);
+      beforeMap.getSource('resultSource').setData(beforeFC);
+
+      const afterFC = createFeatureCollection(afterRaw, denominator);
+      afterMap.getSource('resultSource').setData(afterFC);
+    });
+  })
+
+
+  function loadDay(map, fileLoc) {
+    return fetch(fileLoc)
+      .then(response => response.text())
+      .then(data => {
+        const onlyValids = _u.filter(data.split('\n'), r => !!r);
+        const listFeatures = _u.map(onlyValids, JSON.parse);
+        return listFeatures;
+      })
+  }
+
+  function getDenominator(data) {
+    const denominatorOpts = _u.map(data, r => r.properties.vehicle_volume_index)
+
+    // Calculate the Nth percentile
+    return quantile(denominatorOpts, .98);
+  }
+
+
+  function createFeatureCollection(data, denominator) {
+    const fc = {
+      'type': 'FeatureCollection',
+      'features': [],
+    };
+
+    const scaledFeatures = _u.map(data, r => {
+      const countPerLen = r.properties.vehicle_volume_index;
+      let ratio = Math.max(
+        countPerLen / denominator,
+        0.1);
+      ratio = Math.min(ratio, 1);
+      
+      r.properties['width'] = ratio;
+      r.properties['color'] = d3.interpolateViridis(ratio);
+      return r;
+    })
+
+    fc.features = scaledFeatures;
+    return fc;
+  }
+
+
+
+  // FOR CALCULATING QUANTILES
+  // src: https://stackoverflow.com/a/55297611/3407994
+  const asc = arr => arr.sort((a, b) => a - b);
+
+  const sum = arr => arr.reduce((a, b) => a + b, 0);
+
+  const mean = arr => sum(arr) / arr.length;
+
+  // sample standard deviation
+  const std = (arr) => {
+      const mu = mean(arr);
+      const diffArr = arr.map(a => (a - mu) ** 2);
+      return Math.sqrt(sum(diffArr) / (arr.length - 1));
+  };
+
+  const quantile = (arr, q) => {
+      const sorted = asc(arr);
+      const pos = (sorted.length - 1) * q;
+      const base = Math.floor(pos);
+      const rest = pos - base;
+      if (sorted[base + 1] !== undefined) {
+          return sorted[base] + rest * (sorted[base + 1] - sorted[base]);
+      } else {
+          return sorted[base];
+      }
+  };
+
+</script>
+
+</body>
+</html>
